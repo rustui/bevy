@@ -424,6 +424,12 @@ fn spawn_tree(
 
         commands
             .get_or_spawn(ents[parent_idx])
+            .unwrap_or_else(|| {
+                panic!(
+                    "Entity {:?} already exists with a different generation.",
+                    ents[parent_idx]
+                )
+            })
             .add_child(child_entity);
 
         ents.push(child_entity);

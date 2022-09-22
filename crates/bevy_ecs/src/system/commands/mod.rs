@@ -165,8 +165,10 @@ impl<'w, 's> Commands<'w, 's> {
         }
     }
 
-    /// Pushes a [`Command`] to the queue for creating a new [`Entity`] if the given one does not exists,
+    /// Pushes a [`Command`] to the queue for creating the given [`Entity`] if it does not exist,
     /// and returns its corresponding [`EntityCommands`].
+    ///
+    /// Returns `None` if there is already an entity with the same ID but with a different generation.
     ///
     /// See [`World::get_or_spawn`] for more details.
     ///
@@ -176,11 +178,18 @@ impl<'w, 's> Commands<'w, 's> {
     /// [`Commands::spawn`]. This method should generally only be used for sharing entities across
     /// apps, and only when they have a scheme worked out to share an ID space (which doesn't happen
     /// by default).
-    pub fn get_or_spawn<'a>(&'a mut self, entity: Entity) -> EntityCommands<'w, 's, 'a> {
+    pub fn get_or_spawn<'a>(&'a mut self, entity: Entity) -> Option<EntityCommands<'w, 's, 'a>> {
         self.add(GetOrSpawn { entity });
-        EntityCommands {
-            entity,
-            commands: self,
+        match self.entities.resolve_from_id(entity.id()) {
+            Some(resolved_entity) => (resolved_entity.generation() == entity.generation())
+                .then_some(EntityCommands {
+                    entity,
+                    commands: self,
+                }),
+            None => Some(EntityCommands {
+                entity,
+                commands: self,
+            }),
         }
     }
 
@@ -1039,5 +1048,60 @@ mod tests {
         queue.apply(&mut world);
         assert!(!world.contains_resource::<W<i32>>());
         assert!(world.contains_resource::<W<f64>>());
+    }
+
+    #[test]
+    fn get_or_spawn() {
+        let mut world = World::default();
+        let mut queue = CommandQueue::default();
+        let entity_0v0;
+        let entity_0v1;
+        let entity_1v1 = crate::entity::Entity {
+            generation: 1,
+            id: 1,
+        };
+
+        // spawn 0v0
+        {
+            let mut commands = Commands::new(&mut queue, &world);
+            entity_0v0 = commands.spawn().id();
+            assert!(entity_0v0.id() == 0 && entity_0v0.generation() == 0);
+        }
+        queue.apply(&mut world);
+
+        // despawn 0v0
+        {
+            let mut commands = Commands::new(&mut queue, &world);
+            commands.entity(entity_0v0).despawn();
+        }
+        queue.apply(&mut world);
+
+        // spawn 0v1
+        {
+            let mut commands = Commands::new(&mut queue, &world);
+            entity_0v1 = commands.spawn().id();
+            assert!(entity_0v1.id() == 0 && entity_0v1.generation() == 1);
+        }
+        queue.apply(&mut world);
+
+        {
+            let mut commands = Commands::new(&mut queue, &world);
+
+            // get_or_spawn 0v0
+            assert!(commands.get_or_spawn(entity_0v0).is_none());
+
+            // get_or_spawn 0v1
+            let entity_commands = commands.get_or_spawn(entity_0v1);
+            assert_eq!(entity_commands.unwrap().entity, entity_0v1);
+
+            // get_or_spawn 1v1
+            let entity_commands = commands.get_or_spawn(entity_1v1);
+            assert_eq!(entity_commands.unwrap().entity, entity_1v1);
+        }
+        queue.apply(&mut world);
+
+        assert!(!world.entities().contains(entity_0v0));
+        assert!(world.entities().contains(entity_0v1));
+        assert!(world.entities().contains(entity_1v1));
     }
 }

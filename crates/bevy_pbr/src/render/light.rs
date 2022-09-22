@@ -393,17 +393,25 @@ pub fn extract_clusters(
     mut commands: Commands,
     views: Extract<Query<(Entity, &Clusters), With<Camera>>>,
 ) {
-    for (entity, clusters) in &views {
-        commands.get_or_spawn(entity).insert((
-            ExtractedClustersPointLights {
-                data: clusters.lights.clone(),
-            },
-            ExtractedClusterConfig {
-                near: clusters.near,
-                far: clusters.far,
-                dimensions: clusters.dimensions,
-            },
-        ));
+    for (entity, clusters) in views.iter() {
+        commands
+            .get_or_spawn(entity)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Entity {:?} already exists with a different generation.",
+                    entity
+                )
+            })
+            .insert((
+                ExtractedClustersPointLights {
+                    data: clusters.lights.clone(),
+                },
+                ExtractedClusterConfig {
+                    near: clusters.near,
+                    far: clusters.far,
+                    dimensions: clusters.dimensions,
+                },
+            ));
     }
 }
 
@@ -564,21 +572,29 @@ pub fn extract_lights(
             largest_dimension / directional_light_shadow_map.size as f32;
         // TODO: As above
         let render_visible_entities = visible_entities.clone();
-        commands.get_or_spawn(entity).insert((
-            ExtractedDirectionalLight {
-                color: directional_light.color,
-                illuminance: directional_light.illuminance,
-                direction: transform.forward(),
-                projection: directional_light.shadow_projection.get_projection_matrix(),
-                shadows_enabled: directional_light.shadows_enabled,
-                shadow_depth_bias: directional_light.shadow_depth_bias,
-                // The factor of SQRT_2 is for the worst-case diagonal offset
-                shadow_normal_bias: directional_light.shadow_normal_bias
-                    * directional_light_texel_size
-                    * std::f32::consts::SQRT_2,
-            },
-            render_visible_entities,
-        ));
+        commands
+            .get_or_spawn(entity)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Entity {:?} already exists with a different generation.",
+                    entity
+                )
+            })
+            .insert((
+                ExtractedDirectionalLight {
+                    color: directional_light.color,
+                    illuminance: directional_light.illuminance,
+                    direction: transform.forward(),
+                    projection: directional_light.shadow_projection.get_projection_matrix(),
+                    shadows_enabled: directional_light.shadows_enabled,
+                    shadow_depth_bias: directional_light.shadow_depth_bias,
+                    // The factor of SQRT_2 is for the worst-case diagonal offset
+                    shadow_normal_bias: directional_light.shadow_normal_bias
+                        * directional_light_texel_size
+                        * std::f32::consts::SQRT_2,
+                },
+                render_visible_entities,
+            ));
     }
 }
 
@@ -1563,7 +1579,15 @@ pub fn prepare_clusters(
 
         view_clusters_bindings.write_buffers(render_device, &render_queue);
 
-        commands.get_or_spawn(entity).insert(view_clusters_bindings);
+        commands
+            .get_or_spawn(entity)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Entity {:?} already exists with a different generation.",
+                    entity
+                )
+            })
+            .insert(view_clusters_bindings);
     }
 }
 
